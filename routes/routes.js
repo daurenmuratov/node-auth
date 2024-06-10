@@ -4,13 +4,15 @@ const jwt = require('jsonwebtoken')
 const verifyToken = require('../middleware/auth-middleware')
 
 
+const MAX_FILE_SIZE = 1024 * 1024 * 5 // 5MB
+
 router.get('/', verifyToken, async (req, res) => {
     res.send('Welcome to the authentication API!')
 })
 
 router.post('/register', async (req, res) => {
-    const { name, email, password } = req.body
-    let query = `SELECT * FROM users WHERE email = '${email}'`
+    const { name: username, email, password } = req.body
+    let query = `SELECT * FROM users WHERE username = '${username}' OR email = '${email}`
     let result = await db.get(query);
     if (result) {
         return res.status(400).send({
@@ -26,7 +28,7 @@ router.post('/register', async (req, res) => {
 
     const salt = await bcrypt.genSalt(10)
     const hashedPassword = await bcrypt.hash(req.body.password, salt)
-    let insertUserQuery = `INSERT INTO users (name, email, password) VALUES ('${name}', '${email}', '${hashedPassword}')`
+    let insertUserQuery = `INSERT INTO users (username, email, password) VALUES ('${username}', '${email}', '${hashedPassword}')`
     await db.run(insertUserQuery);
     return res.send({
         message: 'Success'
@@ -34,8 +36,8 @@ router.post('/register', async (req, res) => {
 })
 
 router.post('/login', async (req, res) => {
-    const { email, password } = req.body
-    let query = `SELECT * FROM users WHERE email = '${email}'`
+    const { username, password } = req.body
+    let query = `SELECT * FROM users WHERE username = '${username}'`
     let result = await db.get(query);
     if (result === undefined) {
         return res.status(404).send({
@@ -62,8 +64,8 @@ router.post('/login', async (req, res) => {
 })
 
 router.patch('/change-password', verifyToken, async (req, res) => {
-    let { email, oldPassword, newPassword } = req.body
-    let query = `SELECT * FROM users WHERE email = '${email}'`
+    let { username, oldPassword, newPassword } = req.body
+    let query = `SELECT * FROM users WHERE username = '${username}'`
     let result = await db.get(query);
     const validPassword = await bcrypt.compare(oldPassword, result.password)
     if (!validPassword) {
@@ -79,7 +81,7 @@ router.patch('/change-password', verifyToken, async (req, res) => {
     }
 
     let newPasswordHash = await bcrypt.hash(newPassword, 10)
-    let updatePasswordQuery = `UPDATE users SET password = '${newPasswordHash}' WHERE email = '${email}'`
+    let updatePasswordQuery = `UPDATE users SET password = '${newPasswordHash}' WHERE username = '${username}'`
     await db.run(updatePasswordQuery);
     return res.send({
         message: 'Success'
@@ -112,6 +114,26 @@ router.get('/users', verifyToken, async (req, res) => {
             message: 'Not authorized'
         })
     }
+})
+
+router.post('/upload', verifyToken, (req, res) => {
+    console.log('Upload route hit') // Logging for debug
+    req.upload.single('file')(req, res, function (err) {
+        if (err) {
+            console.error('File upload error:', err) // Logging for debug
+            return res.status(400).send({ message: 'File upload failed', error: err.message })
+        }
+        if (!req.file) {
+            console.log('No file uploaded') // Logging for debug
+            return res.status(400).send({ message: 'No file uploaded' })
+        }
+        if (req.file.size > MAX_FILE_SIZE) {
+            console.log('File too large') // Logging for debug
+            return res.status(400).send({ message: 'File size exceeds the maximum limit of 5MB' })
+        }
+        console.log('File uploaded successfully', req.file) // Logging for debug
+        res.send({ message: 'Success', file: req.file })
+    })
 })
 
 module.exports = router
