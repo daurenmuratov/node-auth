@@ -2,6 +2,7 @@ const router = require('express').Router()
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
 const verifyToken = require('../middleware/auth-middleware')
+const { set } = require('mongoose')
 
 
 const MAX_FILE_SIZE = 1024 * 1024 * 5 // 5MB
@@ -134,6 +135,84 @@ router.post('/upload', verifyToken, (req, res) => {
         console.log('File uploaded successfully', req.file) // Logging for debug
         res.send({ message: 'Success', file: req.file })
     })
+})
+
+router.post('/monitoring', async (req, res) => {
+    try {
+        const axios = require('axios');
+        const cheerio = require('cheerio');
+
+        const response = await axios.get('https://trumploto.club/portal/index.php');
+        const data = response.data;
+
+        // Load data into Cheerio
+        const $ = cheerio.load(data);
+
+        // Get input values by name
+        let timestamp = $('input[name="timestamp"]').val();
+        let timestamp_md5 = $('input[name="timestamp_md5"]').val();
+
+        // Timeout 5 seconds
+        await new Promise(r => setTimeout(r, 5000))
+        let setCookieHeader = response.headers['set-cookie'];
+
+        // Send POST request to trumploto.club/portal/auth.php
+        await axios.post('https://trumploto.club/portal/auth.php', {
+                timestamp: timestamp,
+                timestamp_md5: timestamp_md5,
+                email: 'ObllbO',
+                passw: '12345678',
+            },
+            {
+                withCredentials: true,
+                headers: {
+                    'Cookie': setCookieHeader,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                }
+            }
+        )
+
+        const monitorResponse = await axios.post('https://trumploto.club/portal/monitor_out.php', {
+                update_option: 'on',
+                search: '',
+                filter_account: 'all',
+            },
+            {
+                withCredentials: true,
+                headers: {
+                    'Cookie': setCookieHeader,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                }
+            }
+        )
+
+        trimmedData = monitorResponse.data['table'].replace(/[\n\r\t]/g, '').trim()
+        const $table = cheerio.load(trimmedData)
+
+        // table foreach th get text
+        let tableHeader = []
+        $table('th').each((i, th) => {
+            tableHeader.push($table(th).text())
+        })
+
+        // table foreach tr>td get text
+        let tableData = []
+        $table('tr').each((i, tr) => {
+            let row = []
+            $table(tr).find('td').each((j, td) => {
+                row.push($table(td).text())
+            })
+            if (row.length > 0)
+                tableData.push(row)
+        })
+
+        res.send({ message: 'Success', tableHeader, tableData})
+    } catch (e) {
+        console.error(e)
+        return res.status(400).send({
+            message: 'Error'
+        })
+    }
 })
 
 module.exports = router
