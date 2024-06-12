@@ -137,7 +137,7 @@ router.post('/upload', verifyToken, (req, res) => {
     })
 })
 
-router.post('/monitoring', async (req, res) => {
+router.post('/monitoring', verifyToken, async (req, res) => {
     try {
         const axios = require('axios');
         const cheerio = require('cheerio');
@@ -192,21 +192,33 @@ router.post('/monitoring', async (req, res) => {
         // table foreach th get text
         let tableHeader = []
         $table('th').each((i, th) => {
-            tableHeader.push($table(th).text())
+            if (i == 0 || (i >= 2 && i <= 12))
+                tableHeader.push($table(th).text().replace(/ /g, '\n'))
         })
 
-        // table foreach tr>td get text
+        // table foreach without last row  tr>td get text
         let tableData = []
         $table('tr').each((i, tr) => {
             let row = []
             $table(tr).find('td').each((j, td) => {
-                row.push($table(td).text())
+                if (j == 0 || (j >= 2 && j <= 12))
+                    row.push($table(td).text().replace(/ /g, '\n').replace(/\.00/g, '.00 ').replace(/\.../g, ''));
             })
             if (row.length > 0)
                 tableData.push(row)
         })
 
-        res.send({ message: 'Success', tableHeader, tableData})
+        lastRow = tableData.pop()
+        let tableFooter = []
+        if (lastRow.length == 7) {
+            let row = []
+            lastRow.forEach((td, i) => {
+                row.push(td);
+            })
+            tableFooter.push(row)
+        }
+
+        res.send({ message: 'Success', tableHeader, tableData, tableFooter})
     } catch (e) {
         console.error(e)
         return res.status(400).send({
